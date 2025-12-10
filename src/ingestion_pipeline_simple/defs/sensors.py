@@ -1,10 +1,10 @@
 import dagster as dg
 import os
-from ..assets.binary_files import binary_files, files_partition_def
+from . import assets
 from pathlib import Path
 
 
-add_to_db = dg.define_asset_job("add_to_db", selection=[binary_files])
+add_to_db = dg.define_asset_job("add_to_db", selection=[assets.binary_files]) # type: ignore
 
 @dg.sensor(
     job=add_to_db,
@@ -29,7 +29,7 @@ def file_monitor(context: dg.SensorEvaluationContext) \
     new_files: list[Path] = [file for file, fstats in files_stats
                              if fstats.st_mtime > last_mtime]
     
-    filekeys: list[str] = [str(filepath).split("test_bucket")[1]
+    filekeys: list[str] = [str(filepath).split("test_bucket")[-1]
                            for filepath in new_files]
     
     try:
@@ -40,16 +40,26 @@ def file_monitor(context: dg.SensorEvaluationContext) \
     max_mtime: float = max(last_mtime, max_new_mtime)
     context.update_cursor(str(max_mtime))
 
-    return dg.SensorResult(
-        run_requests=[
-            dg.RunRequest(
-                run_key=filekey,
-                # run_config=...,
-                partition_key=filekey
+    run_reqs: list[dg.RunRequest] = [
+        dg.RunRequest(
+            partition_key=filekey,
+            run_key=filekey,
+            run_config=dg.RunConfig(
+                ops={
+                    "binary_files": {
+                        "config": {
+                            "file_path": str(filepath)
+                        }
+                    }
+                }
             )
-            for filekey in filekeys
-        ],
+        )
+        for filepath, filekey in zip(new_files, filekeys)
+    ]
+
+    return dg.SensorResult(
+        run_requests=run_reqs,
         dynamic_partitions_requests=[
-            files_partition_def.build_add_request(filekeys)
+            assets.files_partition_def.build_add_request(filekeys)
         ]
     )
