@@ -4,7 +4,9 @@ from . import assets
 from pathlib import Path
 
 
-add_to_db = dg.define_asset_job("add_to_db", selection=[assets.binary_files]) # type: ignore
+add_to_db = dg.define_asset_job(
+    "add_to_db", selection=["*json_files", "*vec_embeddings"]
+)
 
 @dg.sensor(
     job=add_to_db,
@@ -43,16 +45,21 @@ def file_monitor(context: dg.SensorEvaluationContext) \
     run_reqs: list[dg.RunRequest] = [
         dg.RunRequest(
             partition_key=filekey,
-            run_key=filekey,
-            run_config=dg.RunConfig(
-                ops={
+            # run_key=filekey,
+            run_config={
+                "ops": {
                     "binary_files": {
                         "config": {
                             "file_path": str(filepath)
                         }
-                    }
+                    },
+                    # "vec_embeddings": {
+                    #     "config": {
+                    #         "file_path": str(filepath)
+                    #     }
+                    # }
                 }
-            )
+            }
         )
         for filepath, filekey in zip(new_files, filekeys)
     ]

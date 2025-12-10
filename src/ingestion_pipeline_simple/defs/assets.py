@@ -63,7 +63,7 @@ def _get_file_path(bucket_key: str, use_str = False) -> Path | str:
         SELECT file_path FROM files
         WHERE bucket_key=?
         """
-        file_path: str = cur.execute(query, (bucket_key,)).fetchone()
+        file_path: str = cur.execute(query, (bucket_key,)).fetchone()[0]
 
     if not use_str:
         return Path(file_path)
@@ -72,7 +72,8 @@ def _get_file_path(bucket_key: str, use_str = False) -> Path | str:
 
 
 @dg.asset(
-    **COMMON_ASSET_ARGS
+    **COMMON_ASSET_ARGS,
+    deps=[binary_files]
 )
 def json_files(context: dg.AssetExecutionContext) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
@@ -82,12 +83,12 @@ def json_files(context: dg.AssetExecutionContext) -> None:
     logger.info("json_files asset")
 
     assert os.path.isfile(file_path)
-    import json
-    with open(file_path, mode="rb") as f:
-        # Probs need to add an actual converter for bin to json
-        jf = json.load(f)
+    with open(file_path, mode="rt") as f:
+        contents: str = f.read()
 
-    strj = json.dumps(str(jf))
+    import json
+    strj: str = json.dumps({"contents": contents})
+    
     with sqlite3.connect(DB_PATH) as conn:
         cur = conn.cursor()
         query = """
@@ -96,10 +97,12 @@ def json_files(context: dg.AssetExecutionContext) -> None:
         WHERE bucket_key=?
         """
         cur.execute(query, (strj, bucket_key))
+        conn.commit()
 
 
 @dg.asset(
-    **COMMON_ASSET_ARGS
+    **COMMON_ASSET_ARGS,
+    deps=[binary_files]
 )
 def plain_files(context: dg.AssetExecutionContext) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
@@ -110,7 +113,7 @@ def plain_files(context: dg.AssetExecutionContext) -> None:
 
     assert os.path.isfile(file_path)
     with open(file_path, "rt", encoding="utf-8") as f:
-        text = f.read()
+        text: str = f.read()
 
     with sqlite3.connect(DB_PATH) as conn:
         cur = conn.cursor()
@@ -120,12 +123,14 @@ def plain_files(context: dg.AssetExecutionContext) -> None:
         WHERE bucket_key=?
         """
         cur.execute(query, (text, bucket_key))
+        conn.commit()
 
 
 CHUNK_SIZE = 32
 
 @dg.asset(
-    **COMMON_ASSET_ARGS
+    **COMMON_ASSET_ARGS,
+    deps=[plain_files]
 )
 def chunks(context: dg.AssetExecutionContext) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
@@ -139,7 +144,7 @@ def chunks(context: dg.AssetExecutionContext) -> None:
         SELECT plain_rep FROM files
         WHERE bucket_key=?
         """
-        plain_text: str = cur.execute(query, (bucket_key,)).fetchone()
+        plain_text: str = cur.execute(query, (bucket_key,)).fetchone()[0]
         chunked_text: dict[int, str] = {
             idx: plain_text[pos:pos+CHUNK_SIZE]
             for idx, pos in enumerate(range(0,len(plain_text),CHUNK_SIZE))
@@ -154,10 +159,12 @@ def chunks(context: dg.AssetExecutionContext) -> None:
         WHERE bucket_key=?
         """
         cur.execute(query, (chunks_str, bucket_key))
+        conn.commit()
 
 
 @dg.asset(
-    **COMMON_ASSET_ARGS
+    **COMMON_ASSET_ARGS,
+    deps=[chunks]
 )
 def vec_embeddings(context: dg.AssetExecutionContext) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
@@ -171,7 +178,7 @@ def vec_embeddings(context: dg.AssetExecutionContext) -> None:
         SELECT chunks FROM files
         WHERE bucket_key=?
         """
-        chunked_text = cur.execute(query, (bucket_key,)).fetchone()
+        chunked_text = cur.execute(query, (bucket_key,)).fetchone()[0]
 
         import random
         vecs: dict[int, float] = {
@@ -187,4 +194,5 @@ def vec_embeddings(context: dg.AssetExecutionContext) -> None:
         WHERE bucket_key=?
         """
         cur.execute(query, (vecs_str, bucket_key))
+        conn.commit()
         
