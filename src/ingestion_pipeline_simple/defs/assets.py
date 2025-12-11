@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 from markitdown import MarkItDown
+from . import resources
 
 import logging
 logger = logging.getLogger(__name__)
@@ -17,14 +18,11 @@ logging.basicConfig(
 
 files_partition_def = dg.DynamicPartitionsDefinition(name="files")
 
-# TODO: Set up resource system
-DB_PATH = Path(os.getcwd().split("src")[0], "database/dummy.db")
-
+DUMMY_DB_PATH = Path(os.getcwd().split("src")[0], "database/dummy.db")
 COMMON_ASSET_ARGS: dict[str, Any] = dict(
     partitions_def=files_partition_def,
     metadata={"partition_expr": "bucket_key"}
 )
-
 REGISTRY: dict[str, Callable] = {}
 
 def register(file_type: str):
@@ -38,7 +36,10 @@ def register(file_type: str):
     **COMMON_ASSET_ARGS,
     config_schema={"file_path": str}
 )
-def binary_files(context: dg.AssetExecutionContext) -> None:
+def binary_files(
+    context: dg.AssetExecutionContext,
+    db: resources.SQLiteResource
+) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
 
@@ -46,19 +47,13 @@ def binary_files(context: dg.AssetExecutionContext) -> None:
     logger.info(f"{bucket_key = }")
     logger.info(f"{context.run_config = }")
     logger.info(f"{context.op_config = }")
+    logger.info(f"{context.resources = }")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    db_path: str = db.db_path
+    with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         query = """
-        INSERT INTO files (
-            bucket_key,
-            file_path,
-            md_rep,
-            json_rep,
-            plain_rep,
-            chunks,
-            vec_embeddings
-        ) VALUES (?, ?, NULL, NULL, NULL, NULL, NULL)
+        INSERT INTO files (bucket_key, file_path) VALUES (?, ?)
         """
         logger.info(f"{query = }")
         cur.execute(query, (bucket_key, context.op_config["file_path"]))
@@ -71,8 +66,12 @@ def binary_files(context: dg.AssetExecutionContext) -> None:
     #     conn.execute(alq.text(query), data)
 
 
-def _get_file_path(bucket_key: str, use_str = False) -> Path | str:
-    with sqlite3.connect(DB_PATH) as conn:
+def _get_file_path(
+    db_path: str | Path,
+    bucket_key: str,
+    use_str = False,
+) -> Path | str:
+    with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         query = """
         SELECT file_path FROM files
@@ -100,10 +99,17 @@ def convert_pdf(filepath: str | Path) -> ...:
     **COMMON_ASSET_ARGS,
     deps=[binary_files]
 )
-def markdown_files(context: dg.AssetExecutionContext) -> None:
+def markdown_files(
+    context: dg.AssetExecutionContext,
+    db: resources.SQLiteResource
+) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
-    file_path = _get_file_path(bucket_key)
+    db_path: str = db.db_path
+    file_path = _get_file_path(
+        DUMMY_DB_PATH,
+        bucket_key
+    )
 
     logger.info("markdown_files asset")
 
@@ -111,7 +117,7 @@ def markdown_files(context: dg.AssetExecutionContext) -> None:
     md = MarkItDown(enable_plugins=False)
     res = md.convert(file_path)
     
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(db_path) as conn:
             cur = conn.cursor()
             query = """
             UPDATE files
@@ -126,12 +132,16 @@ def markdown_files(context: dg.AssetExecutionContext) -> None:
     **COMMON_ASSET_ARGS,
     deps=[markdown_files]
 )
-def json_files(context: dg.AssetExecutionContext) -> None:
+def json_files(
+    context: dg.AssetExecutionContext,
+    db: resources.SQLiteResource
+) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
     logger.info("json_files asset")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    db_path: str = db.db_path
+    with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         query = """
         SELECT md_rep FROM files
@@ -158,12 +168,16 @@ def md_to_plain(md_text: str) -> str:
     **COMMON_ASSET_ARGS,
     deps=[markdown_files]
 )
-def plain_files(context: dg.AssetExecutionContext) -> None:
+def plain_files(
+    context: dg.AssetExecutionContext,
+    db: resources.SQLiteResource
+) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
     logger.info("plain_files asset")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    db_path: str = db.db_path
+    with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         query = """
         SELECT md_rep FROM files
@@ -187,13 +201,17 @@ CHUNK_SIZE = 32
     **COMMON_ASSET_ARGS,
     deps=[plain_files]
 )
-def chunks(context: dg.AssetExecutionContext) -> None:
+def chunks(
+    context: dg.AssetExecutionContext,
+    db: resources.SQLiteResource
+) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
 
     logger.info("chunks asset")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    db_path: str = db.db_path
+    with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         query = """
         SELECT plain_rep FROM files
@@ -221,13 +239,17 @@ def chunks(context: dg.AssetExecutionContext) -> None:
     **COMMON_ASSET_ARGS,
     deps=[chunks]
 )
-def vec_embeddings(context: dg.AssetExecutionContext) -> None:
+def vec_embeddings(
+    context: dg.AssetExecutionContext,
+    db: resources.SQLiteResource
+) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
 
     logger.info("vec_embeddings asset")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    db_path: str = db.db_path
+    with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         query = """
         SELECT chunks FROM files

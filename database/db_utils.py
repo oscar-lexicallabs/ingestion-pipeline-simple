@@ -44,6 +44,14 @@ def check_db(db_name: str = "dummy.db") -> None:
         res = cur.execute(query).fetchall()
         print(set(res))
 
+def drop_table(db_name: str = "dummy.db",
+               tbl_name: str = "files") -> None:
+    with sqlite3.connect(DIR_PATH / db_name) as conn:
+        cur = conn.cursor()
+        query = f"DROP TABLE IF EXISTS {tbl_name}"
+        cur.execute(query)
+        conn.commit()
+
 def check_table(db_name: str = "dummy.db",
                 tbl_name: str = "files") -> None:
     with sqlite3.connect(DIR_PATH / db_name) as conn:
@@ -65,6 +73,7 @@ def drop_val(key: str,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--drop", type=str, default="")
+    parser.add_argument("-dt", "--drop_table", type=str, default="")
     parser.add_argument("-i", "--init", action="store_true")
     parser.add_argument("-t", "--table", type=str, default="files")
     parser.add_argument("-n", "--name", type=str, default="dummy.db")
@@ -78,3 +87,6 @@ if __name__ == "__main__":
         drop_val("/org/usr/files/" + opt.drop,
                  db_name=opt.name,
                  tbl_name=opt.table)
+    if opt.drop_table:
+        drop_table(opt.name, opt.drop_table)
+        

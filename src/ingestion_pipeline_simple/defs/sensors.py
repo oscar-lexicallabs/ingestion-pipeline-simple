@@ -13,8 +13,9 @@ add_to_db = dg.define_asset_job(
     minimum_interval_seconds=5,
     default_status=dg.DefaultSensorStatus.RUNNING
 )
-def file_monitor(context: dg.SensorEvaluationContext) \
-    -> dg.SensorResult:
+def file_monitor(
+    context: dg.SensorEvaluationContext
+) -> dg.SensorResult:
     last_mtime: float = float(context.cursor) if context.cursor else 0
     dirpath: Path = Path(os.getcwd().split("src")[0],
                          "test_bucket", "org", "usr", "files")
