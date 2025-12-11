@@ -1,5 +1,4 @@
 import dagster as dg
-# import sqlalchemy as alq
 import sqlite3
 import os
 from pathlib import Path
@@ -18,7 +17,6 @@ logging.basicConfig(
 
 files_partition_def = dg.DynamicPartitionsDefinition(name="files")
 
-DUMMY_DB_PATH = Path(os.getcwd().split("src")[0], "database/dummy.db")
 COMMON_ASSET_ARGS: dict[str, Any] = dict(
     partitions_def=files_partition_def,
     metadata={"partition_expr": "bucket_key"}
@@ -58,12 +56,6 @@ def binary_files(
         logger.info(f"{query = }")
         cur.execute(query, (bucket_key, context.op_config["file_path"]))
         conn.commit()
-
-    # engine = alq.create_engine(..., echo=True)
-    # with engine.connect() as conn:
-    #     query = "INSERT INTO files (file_name, bucket_key) VALUES (:name, :uri)"
-    #     data = {"name": "example.csv", "uri": "s3://bucket/example.csv"}
-    #     conn.execute(alq.text(query), data)
 
 
 def _get_file_path(
@@ -107,7 +99,7 @@ def markdown_files(
     bucket_key: str = context.partition_key
     db_path: str = db.db_path
     file_path = _get_file_path(
-        DUMMY_DB_PATH,
+        db.db_path,
         bucket_key
     )
 

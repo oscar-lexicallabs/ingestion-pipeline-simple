@@ -1,6 +1,6 @@
 import dagster as dg
 import os
-from . import assets
+from . import assets, resources
 from pathlib import Path
 
 
@@ -14,17 +14,18 @@ add_to_db = dg.define_asset_job(
     default_status=dg.DefaultSensorStatus.RUNNING
 )
 def file_monitor(
-    context: dg.SensorEvaluationContext
+    context: dg.SensorEvaluationContext,
+    bucket: resources.BucketResource
 ) -> dg.SensorResult:
     last_mtime: float = float(context.cursor) if context.cursor else 0
-    dirpath: Path = Path(os.getcwd().split("src")[0],
-                         "test_bucket", "org", "usr", "files")
+    dirpath = Path(bucket.bucket_path, bucket.org, bucket.usr)
     
     files_stats: list[tuple[Path, os.stat_result]] = [
         (filepath, os.stat(filepath))
         for filepath in (
-            dirpath / filename
-            for filename in os.listdir(dirpath)
+            Path(root, file)
+            for root, _, files in os.walk(dirpath)
+            for file in files
         )
         if os.path.isfile(filepath)
     ]
@@ -42,7 +43,7 @@ def file_monitor(
     
     max_mtime: float = max(last_mtime, max_new_mtime)
     context.update_cursor(str(max_mtime))
-
+    
     run_reqs: list[dg.RunRequest] = [
         dg.RunRequest(
             partition_key=filekey,
