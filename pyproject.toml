@@ -5,7 +5,9 @@ version = "0.1.0"
 dependencies = [
     "dagster==1.12.4",
     "markitdown[all]>=0.1.4",
+    "pypandoc>=1.16.2",
     "pytest>=9.0.2",
+    "python-docx>=1.2.0",
 ]
 
 [dependency-groups]

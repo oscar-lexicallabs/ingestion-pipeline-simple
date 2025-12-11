@@ -208,3 +208,5 @@ CHECKLIST.md
 logs/
 *.pdf
 *.docx
+
+words_alpha.txt
