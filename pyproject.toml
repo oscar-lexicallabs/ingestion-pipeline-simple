@@ -5,6 +5,7 @@ version = "0.1.0"
 dependencies = [
     "dagster==1.12.4",
     "markitdown[all]>=0.1.4",
+    "pytest>=9.0.2",
 ]
 
 [dependency-groups]
