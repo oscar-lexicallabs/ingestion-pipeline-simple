@@ -206,3 +206,5 @@ CHECKLIST.md
 
 .tmp*
 logs/
+*.pdf
+*.docx

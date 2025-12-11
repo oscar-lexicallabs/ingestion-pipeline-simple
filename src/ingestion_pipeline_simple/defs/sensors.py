@@ -52,12 +52,7 @@ def file_monitor(context: dg.SensorEvaluationContext) \
                         "config": {
                             "file_path": str(filepath)
                         }
-                    },
-                    # "vec_embeddings": {
-                    #     "config": {
-                    #         "file_path": str(filepath)
-                    #     }
-                    # }
+                    }
                 }
             }
         )

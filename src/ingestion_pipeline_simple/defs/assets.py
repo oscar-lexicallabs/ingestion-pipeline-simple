@@ -3,7 +3,8 @@ import dagster as dg
 import sqlite3
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+from markitdown import MarkItDown
 
 import logging
 logger = logging.getLogger(__name__)
@@ -24,6 +25,14 @@ COMMON_ASSET_ARGS: dict[str, Any] = dict(
     metadata={"partition_expr": "bucket_key"}
 )
 
+REGISTRY: dict[str, Callable] = {}
+
+def register(file_type: str):
+    def decorator(fn: Callable):
+        REGISTRY[file_type] = fn
+        return fn
+    return decorator
+
 
 @dg.asset(
     **COMMON_ASSET_ARGS,
@@ -42,8 +51,14 @@ def binary_files(context: dg.AssetExecutionContext) -> None:
         cur = conn.cursor()
         query = """
         INSERT INTO files (
-            bucket_key, file_path, json_rep, plain_rep, chunks, vec_embeddings
-        ) VALUES (?, ?, NULL, NULL, NULL, NULL)
+            bucket_key,
+            file_path,
+            md_rep,
+            json_rep,
+            plain_rep,
+            chunks,
+            vec_embeddings
+        ) VALUES (?, ?, NULL, NULL, NULL, NULL, NULL)
         """
         logger.info(f"{query = }")
         cur.execute(query, (bucket_key, context.op_config["file_path"]))
@@ -71,58 +86,98 @@ def _get_file_path(bucket_key: str, use_str = False) -> Path | str:
     return file_path
 
 
+@register("docx")
+def convert_docx(filepath: str | Path) -> ...:
+    pass
+
+
+@register("pdf")
+def convert_pdf(filepath: str | Path) -> ...:
+    pass
+
+
 @dg.asset(
     **COMMON_ASSET_ARGS,
     deps=[binary_files]
 )
-def json_files(context: dg.AssetExecutionContext) -> None:
+def markdown_files(context: dg.AssetExecutionContext) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
     file_path = _get_file_path(bucket_key)
 
-    logger.info("json_files asset")
+    logger.info("markdown_files asset")
 
     assert os.path.isfile(file_path)
-    with open(file_path, mode="rt") as f:
-        contents: str = f.read()
-
-    import json
-    strj: str = json.dumps({"contents": contents})
+    md = MarkItDown(enable_plugins=False)
+    res = md.convert(file_path)
     
     with sqlite3.connect(DB_PATH) as conn:
+            cur = conn.cursor()
+            query = """
+            UPDATE files
+            SET md_rep=?
+            WHERE bucket_key=?
+            """
+            cur.execute(query, (res.markdown, bucket_key))
+            conn.commit()
+
+
+@dg.asset(
+    **COMMON_ASSET_ARGS,
+    deps=[markdown_files]
+)
+def json_files(context: dg.AssetExecutionContext) -> None:
+    assert context.has_partition_key is True, "Error: No Partition Key"
+    bucket_key: str = context.partition_key
+    logger.info("json_files asset")
+
+    with sqlite3.connect(DB_PATH) as conn:
         cur = conn.cursor()
+        query = """
+        SELECT md_rep FROM files
+        WHERE bucket_key=?
+        """
+        md = cur.execute(query, (bucket_key,)).fetchone()
+
+        import json
+        json_rep: str = json.dumps({"contents": md})
+    
         query = """
         UPDATE files
         SET json_rep=?
         WHERE bucket_key=?
         """
-        cur.execute(query, (strj, bucket_key))
+        cur.execute(query, (json_rep, bucket_key))
         conn.commit()
 
 
+def md_to_plain(md_text: str) -> str:
+    return md_text
+
 @dg.asset(
     **COMMON_ASSET_ARGS,
-    deps=[binary_files]
+    deps=[markdown_files]
 )
 def plain_files(context: dg.AssetExecutionContext) -> None:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
-    file_path = _get_file_path(bucket_key)
-
     logger.info("plain_files asset")
-
-    assert os.path.isfile(file_path)
-    with open(file_path, "rt", encoding="utf-8") as f:
-        text: str = f.read()
 
     with sqlite3.connect(DB_PATH) as conn:
         cur = conn.cursor()
+        query = """
+        SELECT md_rep FROM files
+        WHERE bucket_key=?
+        """
+        md = cur.execute(query, (bucket_key,)).fetchone()[0]
+
+        plain_text = md_to_plain(md)
         query = """
         UPDATE files
         SET plain_rep=?
         WHERE bucket_key=?
         """
-        cur.execute(query, (text, bucket_key))
+        cur.execute(query, (plain_text, bucket_key))
         conn.commit()
 
 

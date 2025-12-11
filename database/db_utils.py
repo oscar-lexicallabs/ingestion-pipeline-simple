@@ -12,10 +12,26 @@ def init_db(db_name: str = "dummy.db") -> None:
         CREATE TABLE IF NOT EXISTS files (
             bucket_key      VARCHAR(200) PRIMARY KEY NOT NULL,
             file_path       VARCHAR(1000),
+            md_rep          TEXT,
             json_rep        JSONB,
             plain_rep       TEXT,
             chunks          JSONB,
             vec_embeddings  JSONB
+        )
+        """
+        cur.execute(query)
+        conn.commit()
+
+        query = """
+        CREATE TABLE IF NOT EXISTS relationships (
+            doc_a_key       VARCHAR(200) NOT NULL,
+            doc_b_key       VARCHAR(200) NOT NULL,
+            relationship    TEXT CHECK(
+                                relationship IN ('A','B','C')
+                            ) NOT NULL DEFAULT 'A',
+            PRIMARY KEY (doc_a_key, doc_b_key),
+            FOREIGN KEY (doc_a_key) references files (doc_a_key),
+            FOREIGN KEY (doc_b_key) references files (doc_b_key)
         )
         """
         cur.execute(query)
