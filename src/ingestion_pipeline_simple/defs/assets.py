@@ -19,15 +19,18 @@ files_partition_def = dg.DynamicPartitionsDefinition(name="files")
 
 COMMON_ASSET_ARGS: dict[str, Any] = dict(
     partitions_def=files_partition_def,
-    metadata={"partition_expr": "bucket_key"}
+    metadata={"partition_expr": "bucket_key"},
+    code_version="v1",
+    io_manager_key="bucket_io_manager"
 )
+CHUNK_SIZE = 128
 REGISTRY: dict[str, Callable] = {}
 
 def register(file_type: str):
-    def decorator(fn: Callable):
+    def inner(fn: Callable):
         REGISTRY[file_type] = fn
         return fn
-    return decorator
+    return inner
 
 
 @dg.asset(
@@ -37,7 +40,7 @@ def register(file_type: str):
 def binary_files(
     context: dg.AssetExecutionContext,
     db: resources.SQLiteResource
-) -> None:
+) -> dg.Output:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
 
@@ -48,14 +51,21 @@ def binary_files(
     logger.info(f"{context.resources = }")
 
     db_path: str = db.db_path
+    filepath = context.op_config["file_path"]
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         query = """
         INSERT INTO files (bucket_key, file_path) VALUES (?, ?)
         """
         logger.info(f"{query = }")
-        cur.execute(query, (bucket_key, context.op_config["file_path"]))
+        cur.execute(query, (bucket_key, filepath))
         conn.commit()
+
+    filehash = str(hash(filepath) % (10 ** 10))
+    return dg.Output(
+        value=None,
+        data_version=dg.DataVersion("-".join([bucket_key, filehash]))
+    )
 
 
 def _get_file_path(
@@ -94,7 +104,7 @@ def convert_pdf(filepath: str | Path) -> ...:
 def markdown_files(
     context: dg.AssetExecutionContext,
     db: resources.SQLiteResource
-) -> None:
+) -> dg.Output:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
     db_path: str = db.db_path
@@ -118,7 +128,12 @@ def markdown_files(
             """
             cur.execute(query, (res.markdown, bucket_key))
             conn.commit()
-
+    
+    md_hash = str(hash(res.markdown) % (10 ** 10))
+    return dg.Output(
+        value=None,
+        data_version=dg.DataVersion("-".join([bucket_key, md_hash]))
+    )
 
 @dg.asset(
     **COMMON_ASSET_ARGS,
@@ -127,7 +142,7 @@ def markdown_files(
 def json_files(
     context: dg.AssetExecutionContext,
     db: resources.SQLiteResource
-) -> None:
+) -> dg.Output:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
     logger.info("json_files asset")
@@ -152,6 +167,12 @@ def json_files(
         cur.execute(query, (json_rep, bucket_key))
         conn.commit()
 
+    json_hash = str(hash(json_rep) % (10 ** 10))
+    return dg.Output(
+        value=None,
+        data_version=dg.DataVersion("-".join([bucket_key, json_hash]))
+    )
+
 
 def md_to_plain(md_text: str) -> str:
     return md_text
@@ -163,7 +184,7 @@ def md_to_plain(md_text: str) -> str:
 def plain_files(
     context: dg.AssetExecutionContext,
     db: resources.SQLiteResource
-) -> None:
+) -> dg.Output:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
     logger.info("plain_files asset")
@@ -185,9 +206,13 @@ def plain_files(
         """
         cur.execute(query, (plain_text, bucket_key))
         conn.commit()
+    
+    plain_hash = str(hash(plain_text) % (10 ** 10))
+    return dg.Output(
+        value=None,
+        data_version=dg.DataVersion("-".join([bucket_key, plain_hash]))
+    )
 
-
-CHUNK_SIZE = 32
 
 @dg.asset(
     **COMMON_ASSET_ARGS,
@@ -196,7 +221,7 @@ CHUNK_SIZE = 32
 def chunks(
     context: dg.AssetExecutionContext,
     db: resources.SQLiteResource
-) -> None:
+) -> dg.Output:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
 
@@ -225,6 +250,12 @@ def chunks(
         """
         cur.execute(query, (chunks_str, bucket_key))
         conn.commit()
+    
+    chunks_hash = str(hash(chunks_str) % (10 ** 10))
+    return dg.Output(
+        value=None,
+        data_version=dg.DataVersion("-".join([bucket_key, chunks_hash]))
+    )
 
 
 @dg.asset(
@@ -234,7 +265,7 @@ def chunks(
 def vec_embeddings(
     context: dg.AssetExecutionContext,
     db: resources.SQLiteResource
-) -> None:
+) -> dg.Output:
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
 
@@ -265,3 +296,9 @@ def vec_embeddings(
         cur.execute(query, (vecs_str, bucket_key))
         conn.commit()
         
+    vecs_hash = str(hash(vecs_str) % (10 ** 10))
+    return dg.Output(
+        value=None,
+        data_version=dg.DataVersion("-".join([bucket_key, vecs_hash]))
+    )
+    

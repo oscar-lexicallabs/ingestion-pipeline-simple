@@ -1,15 +1,24 @@
 import dagster as dg
 import os
 
+
 class SQLiteResource(dg.ConfigurableResource):
     db_path: str
-
 
 class BucketResource(dg.ConfigurableResource):
     bucket_path: str
     org: str
     usr: str
-    # dirs: str
+
+class BucketIOManager(dg.ConfigurableIOManager):
+    root: str
+
+    def handle_output(self, context: dg.OutputContext, obj: dg.Any) -> None:
+        pass
+
+    def load_input(self, context: dg.InputContext) -> dg.Any:
+        pass
+
 
 @dg.definitions
 def resources():
@@ -28,6 +37,7 @@ def resources():
                 ),
                 org="org",
                 usr="usr"
-            )
+            ),
+            "bucket_io_manager": BucketIOManager(root="./tmp/")
         }
     )

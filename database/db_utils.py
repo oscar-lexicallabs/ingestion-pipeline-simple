@@ -81,12 +81,12 @@ if __name__ == "__main__":
     if opt.init is True:
         init_db(opt.name)
     check_db(opt.name)
-    if opt.table:
-        check_table(opt.name, opt.table)
     if opt.drop:
         drop_val("/org/usr/files/" + opt.drop,
                  db_name=opt.name,
                  tbl_name=opt.table)
+    if opt.table:
+        check_table(opt.name, opt.table)
     if opt.drop_table:
         drop_table(opt.name, opt.drop_table)
         
