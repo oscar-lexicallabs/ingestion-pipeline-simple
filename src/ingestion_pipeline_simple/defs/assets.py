@@ -3,7 +3,7 @@ import sqlite3
 import os
 from pathlib import Path
 from typing import Any, Callable
-from markitdown import MarkItDown
+from markitdown import MarkItDown, DocumentConverterResult
 from . import resources
 
 import logging
@@ -24,7 +24,7 @@ COMMON_ASSET_ARGS: dict[str, Any] = dict(
     io_manager_key="bucket_io_manager"
 )
 CHUNK_SIZE = 128
-REGISTRY: dict[str, Callable] = {}
+REGISTRY: dict[str, Callable[[str | Path], DocumentConverterResult]] = {}
 
 def register(file_type: str):
     def inner(fn: Callable):
@@ -88,13 +88,23 @@ def _get_file_path(
 
 
 @register("docx")
-def convert_docx(filepath: str | Path) -> ...:
-    pass
+def convert_docx(filepath: str | Path) -> DocumentConverterResult:
+    assert os.path.isfile(filepath)
+    assert str(filepath).endswith("docx")
+    md = MarkItDown(enable_plugins=False)
+    res = md.convert(filepath)
+    # Extra steps go before/after conversion
+    return res
 
 
 @register("pdf")
-def convert_pdf(filepath: str | Path) -> ...:
-    pass
+def convert_pdf(filepath: str | Path) -> DocumentConverterResult:
+    assert os.path.isfile(filepath)
+    assert str(filepath).endswith("pdf")
+    md = MarkItDown(enable_plugins=False)
+    res = md.convert(filepath)
+    # Extra steps go before/after conversion
+    return res
 
 
 @dg.asset(
@@ -105,20 +115,18 @@ def markdown_files(
     context: dg.AssetExecutionContext,
     db: resources.SQLiteResource
 ) -> dg.Output:
+    logger.info("markdown_files asset")
+
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
     db_path: str = db.db_path
-    file_path = _get_file_path(
-        db.db_path,
+    filepath = _get_file_path(
+        db_path,
         bucket_key
     )
+    file_type = str(filepath).split(".")[-1]
+    res = REGISTRY[file_type](filepath)
 
-    logger.info("markdown_files asset")
-
-    assert os.path.isfile(file_path)
-    md = MarkItDown(enable_plugins=False)
-    res = md.convert(file_path)
-    
     with sqlite3.connect(db_path) as conn:
             cur = conn.cursor()
             query = """
@@ -134,6 +142,7 @@ def markdown_files(
         value=None,
         data_version=dg.DataVersion("-".join([bucket_key, md_hash]))
     )
+
 
 @dg.asset(
     **COMMON_ASSET_ARGS,
