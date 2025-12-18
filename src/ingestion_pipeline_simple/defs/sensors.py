@@ -5,7 +5,8 @@ from . import assets, resources
 
 
 add_to_db = dg.define_asset_job(
-    "add_to_db", selection=["*json_files", "*vec_embeddings"],op_retry_policy=dg.RetryPolicy(max_retries=0),
+    "add_to_db",
+    op_retry_policy=dg.RetryPolicy(max_retries=0),
 )
 
 
@@ -51,6 +52,13 @@ def file_monitor(
         dg.RunRequest(
             partition_key=filekey,
             run_key=filekey,
+            asset_selection=[
+                dg.AssetKey(
+                    f"converted_{filepath.suffix.lower().replace('.','')}"
+                ),
+                dg.AssetKey("*json_files"),
+                dg.AssetKey("*vec_embeddings")
+            ],
             run_config={
                 "ops": {
                     "binary_files": {

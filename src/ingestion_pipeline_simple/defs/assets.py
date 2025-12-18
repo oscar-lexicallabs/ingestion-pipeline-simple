@@ -3,7 +3,7 @@ import sqlite3
 import os
 from pathlib import Path
 from typing import Any, Callable
-from markitdown import MarkItDown
+from markitdown import MarkItDown, DocumentConverterResult
 from . import resources
 
 import logging
@@ -24,13 +24,6 @@ COMMON_ASSET_ARGS: dict[str, Any] = dict(
     io_manager_key="bucket_io_manager"
 )
 CHUNK_SIZE = 128
-REGISTRY: dict[str, Callable] = {}
-
-def register(file_type: str):
-    def inner(fn: Callable):
-        REGISTRY[file_type] = fn
-        return fn
-    return inner
 
 
 @dg.asset(
@@ -87,38 +80,112 @@ def _get_file_path(
     return file_path
 
 
-@register("docx")
-def convert_docx(filepath: str | Path) -> ...:
-    pass
+@dg.op(
+    ins={"filepath": dg.In(dagster_type=Path)}
+)
+def convert_bin(filepath) -> dg.Output:
+    assert os.path.isfile(filepath)
+    if str(filepath).endswith("bin"):
+        return dg.Output("")
+    md = MarkItDown(enable_plugins=False)
+    res = md.convert(filepath).markdown
+    return dg.Output(res)
 
 
-@register("pdf")
-def convert_pdf(filepath: str | Path) -> ...:
-    pass
+@dg.op(
+    ins={"filepath": dg.In(dagster_type=Path)}
+)
+def convert_docx(filepath) -> dg.Output:
+    assert os.path.isfile(filepath)
+    if str(filepath).endswith("docx"):
+        return dg.Output("")
+    md = MarkItDown(enable_plugins=False)
+    res = md.convert(filepath).markdown
+    return dg.Output(res)
+
+
+@dg.op(
+    ins={"filepath": dg.In(dagster_type=Path)}
+)
+def convert_pdf(filepath) -> dg.Output:
+    assert os.path.isfile(filepath)
+    if str(filepath).endswith("pdf"):
+        return dg.Output("")
+    md = MarkItDown(enable_plugins=False)
+    res = md.convert(filepath).markdown
+    return dg.Output(res)
+
+
+@dg.graph_multi_asset(
+    partitions_def=files_partition_def,
+    can_subset=True,
+    ins={
+        "binary_files": dg.AssetIn(key="binary_files")
+    },
+    outs={
+        "bin": dg.AssetOut(key="converted_bin"),
+        "docx": dg.AssetOut(key="converted_docx"),
+        "pdf": dg.AssetOut(key="converted_pdf")
+    },
+    resource_defs={
+        "db": resources.SQLiteResource
+    }
+)
+def convert_to_md(
+    cxt: dg.AssetExecutionContext,
+    db: resources.SQLiteResource,
+    binary_files
+) -> dict[str, Callable[[str | Path], DocumentConverterResult]]:
+    logger.info("convert_to_md multi_asset")
+    assert cxt.has_partition_key is True, "Error: No Partition Key"
+    bucket_key: str = cxt.partition_key
+    db_path: str = db.db_path
+    filepath = _get_file_path(
+        db_path,
+        bucket_key
+    )
+    bin_md = convert_bin(filepath)
+    docx_md = convert_docx(filepath)
+    pdf_md = convert_pdf(filepath)
+
+    return {
+        "bin": bin_md,
+        "docx": docx_md,
+        "pdf": pdf_md,
+    }
 
 
 @dg.asset(
     **COMMON_ASSET_ARGS,
-    deps=[binary_files]
+    ins={
+        "converted_bin": dg.AssetIn("converted_bin"),
+        "converted_docx": dg.AssetIn("converted_docx"),
+        "converted_pdf": dg.AssetIn("converted_pdf"),
+    }
 )
 def markdown_files(
     context: dg.AssetExecutionContext,
-    db: resources.SQLiteResource
+    db: resources.SQLiteResource,
+    converted_bin,
+    converted_docx,
+    converted_pdf
 ) -> dg.Output:
+    logger.info("markdown_files asset")
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
     db_path: str = db.db_path
-    file_path = _get_file_path(
-        db.db_path,
-        bucket_key
-    )
-
-    logger.info("markdown_files asset")
-
-    assert os.path.isfile(file_path)
-    md = MarkItDown(enable_plugins=False)
-    res = md.convert(file_path)
     
+    selected = context.selected_asset_keys
+
+    if dg.AssetKey("converted_bin") in selected:
+        res = converted_bin
+    elif dg.AssetKey("converted_docx") in selected:
+        res = converted_docx
+    elif dg.AssetKey("converted_pdf") in selected:
+        res = converted_pdf
+    else:
+        raise RuntimeError("No converted asset selected")
+        
     with sqlite3.connect(db_path) as conn:
             cur = conn.cursor()
             query = """
@@ -126,14 +193,15 @@ def markdown_files(
             SET md_rep=?
             WHERE bucket_key=?
             """
-            cur.execute(query, (res.markdown, bucket_key))
+            cur.execute(query, (res, bucket_key))
             conn.commit()
     
-    md_hash = str(hash(res.markdown) % (10 ** 10))
+    md_hash = str(hash(res) % (10 ** 10))
     return dg.Output(
         value=None,
         data_version=dg.DataVersion("-".join([bucket_key, md_hash]))
     )
+
 
 @dg.asset(
     **COMMON_ASSET_ARGS,
