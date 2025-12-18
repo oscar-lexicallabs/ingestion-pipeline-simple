@@ -1,12 +1,13 @@
 import dagster as dg
 import os
-from . import assets, resources
 from pathlib import Path
+from . import assets, resources
 
 
 add_to_db = dg.define_asset_job(
     "add_to_db", selection=["*json_files", "*vec_embeddings"],op_retry_policy=dg.RetryPolicy(max_retries=0),
 )
+
 
 @dg.sensor(
     job=add_to_db,
@@ -49,7 +50,7 @@ def file_monitor(
     run_reqs: list[dg.RunRequest] = [
         dg.RunRequest(
             partition_key=filekey,
-            # run_key=filekey,
+            run_key=filekey,
             run_config={
                 "ops": {
                     "binary_files": {
