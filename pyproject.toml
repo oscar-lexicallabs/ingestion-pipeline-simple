@@ -3,6 +3,7 @@ name = "ingestion_pipeline_simple"
 requires-python = ">=3.10,<3.14"
 version = "0.1.0"
 dependencies = [
+    "awscli-local>=0.22.2",
     "dagster==1.12.4",
     "markitdown[all]>=0.1.4",
     "pypandoc>=1.16.2",
