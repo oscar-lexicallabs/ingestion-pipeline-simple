@@ -87,6 +87,16 @@ def _get_file_path(
     return file_path
 
 
+@register("bin")
+def convert_dummy(filepath: str | Path) -> DocumentConverterResult:
+    assert os.path.isfile(filepath)
+    assert str(filepath).endswith("bin")
+    md = MarkItDown(enable_plugins=False)
+    res = md.convert(filepath)
+    # Extra steps go before/after conversion
+    return res
+
+
 @register("docx")
 def convert_docx(filepath: str | Path) -> DocumentConverterResult:
     assert os.path.isfile(filepath)
@@ -125,7 +135,16 @@ def markdown_files(
         bucket_key
     )
     file_type = str(filepath).split(".")[-1]
-    res = REGISTRY[file_type](filepath)
+    try:
+        res = REGISTRY[file_type](filepath)
+    except KeyError:
+        print(f"""
+              
+            Unexpected file type ({file_type}).
+            Accepted file types: {list(REGISTRY.keys())}.
+
+        """)
+        quit()
 
     with sqlite3.connect(db_path) as conn:
             cur = conn.cursor()
