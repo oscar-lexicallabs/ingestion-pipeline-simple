@@ -7,5 +7,5 @@ services:
     environment:
       - ./s3.env
     volumes:
-      - "./test_bucket:/var/lib/localstack"
+      - "./test_bucket/org/usr/files:/var/lib/localstack"
       - "/var/run/docker.sock:/var/run/docker.sock"

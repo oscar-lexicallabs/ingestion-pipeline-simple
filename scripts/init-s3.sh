@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# set -e
 
 bucket_name=test-bucket
 awslocal s3 mb s3://$bucket_name || true

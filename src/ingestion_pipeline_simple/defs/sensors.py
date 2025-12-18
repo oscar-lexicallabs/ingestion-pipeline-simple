@@ -19,27 +19,25 @@ def file_monitor(
     bucket: resources.BucketResource
 ) -> dg.SensorResult:
     last_mtime: float = float(context.cursor) if context.cursor else 0
-    dirpath = Path(bucket.bucket_path, bucket.org, bucket.usr)
-    
-    files_stats: list[tuple[Path, os.stat_result]] = [
-        (filepath, os.stat(filepath))
-        for filepath in (
-            Path(root, file)
-            for root, _, files in os.walk(dirpath)
-            for file in files
-        )
-        if os.path.isfile(filepath)
+    s3_conn = bucket.get_boto_conn()
+    response = s3_conn.list_objects_v2(Bucket=bucket.bucket_path)
+    objects = response.get("Contents", [])
+
+    files_stats: list[tuple[str, float]] = [
+        (data.get("Key", ""), data.get("LastModified").timestamp())
+        for data in objects
     ]
 
-    new_files: list[Path] = [file for file, fstats in files_stats
-                             if fstats.st_mtime > last_mtime]
+    new_files: list[str] = [file for file, mtime in files_stats
+                            if mtime > last_mtime]
     
     filekeys: list[str] = [str(filepath).split("test_bucket")[-1]
                            for filepath in new_files]
-    
+
+
     try:
         max_new_mtime: float = max([
-            fstats.st_mtime for _, fstats in files_stats
+            mtime for _, mtime in files_stats
         ])
     except ValueError:
         max_new_mtime = 0

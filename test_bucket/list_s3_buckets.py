@@ -8,4 +8,8 @@ s3 = boto3.client(
     region_name="us-east-1",
 )
 
-print(s3.list_buckets())
+print(s3.list_objects_v2(Bucket="test-bucket")
+    .get("Contents", [])[0]
+    .get("LastModified", "")
+    .timestamp()
+)

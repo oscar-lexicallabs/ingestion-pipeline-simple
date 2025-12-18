@@ -89,7 +89,7 @@ def _get_file_path(
 
 @register("bin")
 def convert_dummy(filepath: str | Path) -> DocumentConverterResult:
-    assert os.path.isfile(filepath)
+    # assert os.path.isfile(filepath)
     assert str(filepath).endswith("bin")
     md = MarkItDown(enable_plugins=False)
     res = md.convert(filepath)
@@ -99,7 +99,7 @@ def convert_dummy(filepath: str | Path) -> DocumentConverterResult:
 
 @register("docx")
 def convert_docx(filepath: str | Path) -> DocumentConverterResult:
-    assert os.path.isfile(filepath)
+    # assert os.path.isfile(filepath)
     assert str(filepath).endswith("docx")
     md = MarkItDown(enable_plugins=False)
     res = md.convert(filepath)
@@ -109,7 +109,7 @@ def convert_docx(filepath: str | Path) -> DocumentConverterResult:
 
 @register("pdf")
 def convert_pdf(filepath: str | Path) -> DocumentConverterResult:
-    assert os.path.isfile(filepath)
+    # assert os.path.isfile(filepath)
     assert str(filepath).endswith("pdf")
     md = MarkItDown(enable_plugins=False)
     res = md.convert(filepath)

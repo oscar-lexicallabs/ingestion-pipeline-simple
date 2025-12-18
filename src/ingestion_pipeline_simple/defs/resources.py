@@ -1,5 +1,6 @@
 import dagster as dg
 import os
+import boto3
 
 
 class SQLiteResource(dg.ConfigurableResource):
@@ -9,6 +10,15 @@ class BucketResource(dg.ConfigurableResource):
     bucket_path: str
     org: str
     usr: str
+
+    def get_boto_conn(self):
+        return boto3.client(
+            "s3",
+            endpoint_url="http://localhost:4566",
+            aws_access_key_id="test",
+            aws_secret_access_key="test",
+            region_name="us-east-1",
+        )
 
 class BucketIOManager(dg.ConfigurableIOManager):
     root: str
@@ -31,10 +41,11 @@ def resources():
                 )
             ),
             "bucket": BucketResource(
-                bucket_path=os.path.join(
-                    os.getcwd().split("src")[0],
-                    "test_bucket"
-                ),
+                # bucket_path=os.path.join(
+                #     os.getcwd().split("src")[0],
+                #     "test_bucket"
+                # ),
+                bucket_path="test-bucket",
                 org="org",
                 usr="usr"
             ),
