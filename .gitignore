@@ -206,8 +206,15 @@ __marimo__/
 
 CHECKLIST.md
 
+tmp*
 .tmp*
-logs/
+
+logs
+.logs
+
+cache
+.cache
+
 *.pdf
 *.docx
 
