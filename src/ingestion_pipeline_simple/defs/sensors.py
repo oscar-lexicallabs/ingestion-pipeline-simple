@@ -68,5 +68,6 @@ def file_monitor(
         run_requests=run_reqs,
         dynamic_partitions_requests=[
             assets.files_partition_def.build_add_request(filekeys)
-        ]
+        ],
+        cursor=context.cursor
     )
