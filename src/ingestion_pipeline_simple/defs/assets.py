@@ -24,7 +24,7 @@ COMMON_ASSET_ARGS: dict[str, Any] = dict(
     io_manager_key="bucket_io_manager"
 )
 CHUNK_SIZE = 128
-REGISTRY: dict[str, Callable[[str | Path], DocumentConverterResult]] = {}
+REGISTRY: dict[str, Callable[[dict[str, Any]], DocumentConverterResult]] = {}
 
 def register(file_type: str):
     def inner(fn: Callable):
@@ -88,31 +88,28 @@ def _get_file_path(
 
 
 @register("bin")
-def convert_dummy(filepath: str | Path) -> DocumentConverterResult:
-    # assert os.path.isfile(filepath)
-    assert str(filepath).endswith("bin")
+def convert_dummy(file_object: dict[str, Any]) -> DocumentConverterResult:
+    body: str = file_object["Body"]
     md = MarkItDown(enable_plugins=False)
-    res = md.convert(filepath)
+    res = md.convert(body)
     # Extra steps go before/after conversion
     return res
 
 
 @register("docx")
-def convert_docx(filepath: str | Path) -> DocumentConverterResult:
-    # assert os.path.isfile(filepath)
-    assert str(filepath).endswith("docx")
+def convert_docx(file_object: dict[str, Any]) -> DocumentConverterResult:
+    body: str = file_object["Body"]
     md = MarkItDown(enable_plugins=False)
-    res = md.convert(filepath)
+    res = md.convert(body)
     # Extra steps go before/after conversion
     return res
 
 
 @register("pdf")
-def convert_pdf(filepath: str | Path) -> DocumentConverterResult:
-    # assert os.path.isfile(filepath)
-    assert str(filepath).endswith("pdf")
+def convert_pdf(file_object: dict[str, Any]) -> DocumentConverterResult:
+    body: str = file_object["Body"]
     md = MarkItDown(enable_plugins=False)
-    res = md.convert(filepath)
+    res = md.convert(body)
     # Extra steps go before/after conversion
     return res
 
@@ -123,20 +120,22 @@ def convert_pdf(filepath: str | Path) -> DocumentConverterResult:
 )
 def markdown_files(
     context: dg.AssetExecutionContext,
-    db: resources.SQLiteResource
+    db: resources.SQLiteResource,
+    bucket: resources.BucketResource
 ) -> dg.Output:
     logger.info("markdown_files asset")
 
     assert context.has_partition_key is True, "Error: No Partition Key"
     bucket_key: str = context.partition_key
-    db_path: str = db.db_path
-    filepath = _get_file_path(
-        db_path,
-        bucket_key
+    file_type = bucket_key.split(".")[-1]
+
+    s3_conn = bucket.get_boto_conn()
+    file: dict[str, Any] = s3_conn.get_object(
+        Bucket=bucket.bucket_path,
+        Key=bucket_key
     )
-    file_type = str(filepath).split(".")[-1]
     try:
-        res = REGISTRY[file_type](filepath)
+        res = REGISTRY[file_type](file)
     except KeyError:
         print(f"""
               
@@ -146,6 +145,7 @@ def markdown_files(
         """)
         quit()
 
+    db_path: str = db.db_path
     with sqlite3.connect(db_path) as conn:
             cur = conn.cursor()
             query = """

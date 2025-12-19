@@ -10,6 +10,4 @@ s3 = boto3.client(
 
 print(s3.list_objects_v2(Bucket="test-bucket")
     .get("Contents", [])[0]
-    .get("LastModified", "")
-    .timestamp()
 )

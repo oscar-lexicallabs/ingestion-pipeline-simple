@@ -23,22 +23,16 @@ def file_monitor(
     response = s3_conn.list_objects_v2(Bucket=bucket.bucket_path)
     objects = response.get("Contents", [])
 
-    files_stats: list[tuple[str, float]] = [
+    keys_stats: list[tuple[str, float]] = [
         (data.get("Key", ""), data.get("LastModified").timestamp())
         for data in objects
     ]
 
-    new_files: list[str] = [file for file, mtime in files_stats
+    new_files: list[str] = [key for key, mtime in keys_stats
                             if mtime > last_mtime]
-    
-    filekeys: list[str] = [str(filepath).split("test_bucket")[-1]
-                           for filepath in new_files]
-
 
     try:
-        max_new_mtime: float = max([
-            mtime for _, mtime in files_stats
-        ])
+        max_new_mtime: float = max([mtime for _, mtime in keys_stats])
     except ValueError:
         max_new_mtime = 0
     
@@ -47,24 +41,26 @@ def file_monitor(
 
     run_reqs: list[dg.RunRequest] = [
         dg.RunRequest(
-            partition_key=filekey,
-            run_key=filekey,
+            partition_key=key,
+            run_key=key,
             run_config={
                 "ops": {
                     "binary_files": {
                         "config": {
-                            "file_path": str(filepath)
+                            "file_path": "s3://" \
+                                          + bucket.bucket_path \
+                                          + "/" + key
                         }
                     }
                 }
             }
         )
-        for filepath, filekey in zip(new_files, filekeys)
+        for key in new_files
     ]
 
     return dg.SensorResult(
         run_requests=run_reqs,
         dynamic_partitions_requests=[
-            assets.files_partition_def.build_add_request(filekeys)
+            assets.files_partition_def.build_add_request(new_files)
         ]
     )

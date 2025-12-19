@@ -219,3 +219,5 @@ cache*
 *.docx
 
 words_alpha.txt
+
+./database/*.db
