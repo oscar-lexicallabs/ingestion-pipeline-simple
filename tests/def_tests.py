@@ -1,7 +1,7 @@
 import dagster as dg
 import pytest
 import sqlite3
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 import ingestion_pipeline_simple.defs
 from ingestion_pipeline_simple.utils import handle_files
 import os
@@ -108,7 +108,7 @@ def test_markdown_files_asset():
     )
     # Materialize upstream assets to enable isolated testing
     # upstream_res = dg.materialize_to_memory()
-    res: dg.Output = assets.markdown_files(context, mock_db_resource)
+    res: dg.Output = assets.markdown_files(context, mock_db_resource) # type: ignore
     assert res.value is None
     query = """
         SELECT md_rep FROM files
@@ -132,7 +132,7 @@ def test_json_files_asset():
         instance=instance,
         partition_key=bucket_key
     )
-    res: dg.Output = assets.json_files(context, mock_db_resource)
+    res: dg.Output = assets.json_files(context, mock_db_resource) # type: ignore
     assert res.value is None
     query = """
         SELECT json_rep FROM files
@@ -160,7 +160,7 @@ def test_plain_files_asset():
         instance=instance,
         partition_key=bucket_key
     )
-    res: dg.Output = assets.plain_files(context, mock_db_resource)
+    res: dg.Output = assets.plain_files(context, mock_db_resource) # type: ignore
     assert res.value is None
     query = """
         SELECT plain_rep FROM files
@@ -184,7 +184,7 @@ def test_chunks_asset():
         instance=instance,
         partition_key=bucket_key
     )
-    res: dg.Output = assets.chunks(context, mock_db_resource)
+    res: dg.Output = assets.chunks(context, mock_db_resource) # type: ignore
     assert res.value is None
     query = """
         SELECT chunks FROM files
@@ -213,7 +213,7 @@ def test_vecs_asset():
         instance=instance,
         partition_key=bucket_key
     )
-    res: dg.Output = assets.vec_embeddings(context, mock_db_resource)
+    res: dg.Output = assets.vec_embeddings(context, mock_db_resource) # type: ignore
     assert res.value is None
     query = """
         SELECT vec_embeddings FROM files

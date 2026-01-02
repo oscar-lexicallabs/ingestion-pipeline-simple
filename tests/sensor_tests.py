@@ -1,15 +1,10 @@
 import dagster as dg
-import pytest
-from unittest.mock import patch, Mock
+from unittest.mock import Mock
 from ingestion_pipeline_simple.defs import sensors
 # from ..test_bucket import handle_files
 from pathlib import Path
 import os
 
-# Need to test:
-#   - If it triggers correctly
-#   - If it triggers the right job
-#   - If the cursor contains the right info
 
 def test_sensor_skip(tmp_path: Path):
     mock_bucket = Mock()
