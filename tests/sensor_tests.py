@@ -1,15 +1,10 @@
 import dagster as dg
-import pytest
-from unittest.mock import patch, Mock
+from unittest.mock import Mock
 from ingestion_pipeline_simple.defs import sensors
 # from ..test_bucket import handle_files
 from pathlib import Path
 import os
 
-# Need to test:
-#   - If it triggers correctly
-#   - If it triggers the right job
-#   - If the cursor contains the right info
 
 def test_sensor_skip(tmp_path: Path):
     mock_bucket = Mock()
@@ -35,8 +30,12 @@ def test_sensor_skip(tmp_path: Path):
     res = sensors.file_monitor(context)
     assert isinstance(res, dg.SensorResult)
     # assert not res
-    assert len(res.run_requests) == 0
-    assert len(res.dynamic_partitions_requests[0].partition_keys) == 0
+    assert res.run_requests is not None \
+        and len(res.run_requests) == 0
+    assert res.dynamic_partitions_requests is not None \
+        and len(res.dynamic_partitions_requests[0].partition_keys) == 0
+    assert res.cursor is not None \
+        and float(res.cursor) == 0
 
 
 def test_sensor_run(tmp_path: Path):
@@ -68,5 +67,9 @@ def test_sensor_run(tmp_path: Path):
     res = sensors.file_monitor(context)
     assert isinstance(res, dg.SensorResult)
     assert res.skip_reason is None
-    assert len(res.run_requests) == 1
-    assert len(res.dynamic_partitions_requests[0].partition_keys) == 1
+    assert res.run_requests is not None \
+        and len(res.run_requests) == 1
+    assert res.dynamic_partitions_requests is not None \
+        and len(res.dynamic_partitions_requests[0].partition_keys) == 1
+    assert res.cursor is not None \
+        and float(res.cursor) > 0
